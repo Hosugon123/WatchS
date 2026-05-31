@@ -12,10 +12,11 @@ import {
   clearSession,
   readSession,
   validateSession,
+  writeSession,
   type AuthSession,
 } from '@/lib/authSession';
 import { userHasPermission } from '@/lib/permissionChecks';
-import { getSystemUserById } from '@/lib/systemUsersStorage';
+import { getSystemUserById, SYSTEM_USERS_UPDATED_EVENT } from '@/lib/systemUsersStorage';
 import { isSuperAdminSession } from '@/lib/authSession';
 import type { PermissionKey } from '@/types/permissions';
 import type { SystemUser } from '@/lib/systemUsersStorage';
@@ -40,8 +41,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const syncSession = useCallback(() => {
     const s = readSession();
-    if (s && validateSession(s)) setSession(s);
-    else {
+    if (s && validateSession(s)) {
+      setSession(s);
+    } else {
       clearSession();
       setSession(null);
     }
@@ -52,6 +54,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener(AUTH_SESSION_CHANGED_EVENT, syncSession);
     return () => window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, syncSession);
   }, [syncSession]);
+
+  useEffect(() => {
+    const onUsersUpdated = () => {
+      const s = readSession();
+      if (s) {
+        const u = getSystemUserById(s.userId);
+        if (u?.status === 'active' && u.loginId && u.role !== s.role) {
+          writeSession({ userId: u.id, loginId: u.loginId, role: u.role });
+          return;
+        }
+      }
+      setUserTick((t) => t + 1);
+    };
+    window.addEventListener(SYSTEM_USERS_UPDATED_EVENT, onUsersUpdated);
+    return () => window.removeEventListener(SYSTEM_USERS_UPDATED_EVENT, onUsersUpdated);
+  }, []);
 
   const user = useMemo(() => {
     void userTick;

@@ -29,8 +29,7 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-lg">
             <Watch className="h-7 w-7" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">職人手錶進銷存</h1>
-          <p className="mt-1 text-sm text-slate-400">請使用管理員核發的帳號登入</p>
+          <h1 className="text-xl font-bold tracking-tight">手錶銷售管理系統</h1>
         </div>
 
         <form onSubmit={submit} className="space-y-5">
@@ -73,11 +72,6 @@ export default function LoginScreen({ onSuccess }: LoginScreenProps) {
           >
             {busy ? '登入中…' : '登入系統'}
           </button>
-
-          <p className="text-center text-xs text-slate-500">
-            首次安裝預設管理員：<span className="font-mono text-amber-400/90">sw001</span>／密碼{' '}
-            <span className="font-mono text-amber-400/90">1234</span>（請登入後立即變更）
-          </p>
         </form>
       </div>
     </div>

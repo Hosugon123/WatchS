@@ -13,8 +13,11 @@ export const SHENGWATCH_EXPORT_STORAGE_KEYS = [
   'shengwatch_account_opening_balances_v1',
   'shengwatch_account_profiles_v1',
   'shengwatch_vendor_payables_v1',
+  'shengwatch_ledger_entries_v1',
   'shengwatch_system_users_v1',
   'shengwatch_login_credentials_v1',
+  'shengwatch_brand_logo_v1',
+  'shengwatch_sale_price_buckets_v1',
 ] as const;
 
 export type ShengwatchStorageKey = (typeof SHENGWATCH_EXPORT_STORAGE_KEYS)[number];
@@ -38,6 +41,7 @@ export function dispatchShengwatchStorageSyncEvents(): void {
   window.dispatchEvent(new Event('shengwatchAccountOpeningBalancesUpdated'));
   window.dispatchEvent(new Event('shengwatchAccountProfilesUpdated'));
   window.dispatchEvent(new Event('shengwatchVendorPayablesUpdated'));
+  window.dispatchEvent(new Event('shengwatchLedgerEntriesUpdated'));
   window.dispatchEvent(new Event(SHENGWATCH_DATA_BUNDLE_IMPORTED_EVENT));
 }
 

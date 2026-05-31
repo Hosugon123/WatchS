@@ -2,6 +2,7 @@ import { Edit, KeyRound, Search, Shield, UserPlus, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { accounts } from '@/services/watchApiService';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsNarrowScreen } from '@/hooks/useIsNarrowScreen';
 import { isPrimarySuperAdminUser, SYSTEM_USERS_UPDATED_EVENT, type SystemUser } from '@/lib/systemUsersStorage';
 import { PERMISSION_GROUPS, type PermissionKey } from '@/types/permissions';
 import { cn } from '@/lib/utils';
@@ -62,9 +63,35 @@ function PermissionChecklist({
   );
 }
 
+function UserRowActions({
+  onEdit,
+  onResetPassword,
+  compact,
+}: {
+  onEdit: () => void;
+  onResetPassword: () => void;
+  compact?: boolean;
+}) {
+  const btn =
+    'inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800';
+  return (
+    <div className={cn('flex flex-wrap gap-2', compact ? '' : 'justify-end')}>
+      <button type="button" className={btn} onClick={onEdit}>
+        <Edit className="h-3.5 w-3.5" />
+        編輯
+      </button>
+      <button type="button" className={btn} onClick={onResetPassword}>
+        <KeyRound className="h-3.5 w-3.5" />
+        重設密碼
+      </button>
+    </div>
+  );
+}
+
 export default function UserPermissions() {
   const { isSuperAdmin, can } = useAuth();
   const canManage = can('manage_users');
+  const narrow = useIsNarrowScreen();
 
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,6 +166,13 @@ export default function UserPermissions() {
     setEditPhone(u.phone);
     setEditStatus(u.status);
     setEditPerms({ ...u.permissions });
+  };
+
+  const openPasswordReset = (u: SystemUser) => {
+    setPwdError(null);
+    setPwdNew('');
+    setPwdNew2('');
+    setPwdFor(u);
   };
 
   const submitAdd = async () => {
@@ -280,34 +314,83 @@ export default function UserPermissions() {
         />
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500">
-            <tr>
-              <th className="px-4 py-3 font-medium">使用者</th>
-              <th className="px-4 py-3 font-medium">登入帳號</th>
-              <th className="px-4 py-3 font-medium">角色</th>
-              <th className="px-4 py-3 font-medium">狀態</th>
-              <th className="px-4 py-3 text-right font-medium">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+      {loading ? (
+        <p className="rounded-xl border border-slate-200 bg-white py-10 text-center text-sm text-slate-400">載入中…</p>
+      ) : narrow ? (
+        <div className="space-y-3">
+          {filtered.map((u) => (
+            <article
+              key={u.id}
+              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-800 text-sm font-bold text-white">
+                  {avatarChar(u.name)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-slate-900">{u.name}</p>
+                  <p className="mt-0.5 font-mono text-sm text-amber-800">{u.loginId ?? '—'}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                      {roleLabel(u.role)}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-xs font-medium',
+                        u.status === 'active' ? 'text-emerald-600' : 'text-red-600',
+                      )}
+                    >
+                      {u.status === 'active' ? '啟用' : '停權'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 border-t border-slate-100 pt-3">
+                <UserRowActions
+                  compact
+                  onEdit={() => openEdit(u)}
+                  onResetPassword={() => openPasswordReset(u)}
+                />
+              </div>
+            </article>
+          ))}
+          {filtered.length === 0 && (
+            <p className="rounded-xl border border-slate-200 bg-white py-8 text-center text-sm text-slate-400">
+              沒有符合條件的使用者。
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
-                  載入中…
-                </td>
+                <th className="px-4 py-3 font-medium">使用者</th>
+                <th className="px-4 py-3 font-medium">登入帳號</th>
+                <th className="px-4 py-3 font-medium">角色</th>
+                <th className="px-4 py-3 font-medium">狀態</th>
+                <th className="px-4 py-3 font-medium">操作</th>
               </tr>
-            ) : (
-              filtered.map((u) => (
-                <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50/50">
+            </thead>
+            <tbody>
+              {filtered.map((u) => (
+                <tr
+                  key={u.id}
+                  className="border-t border-slate-100 hover:bg-slate-50/50"
+                >
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-white">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 text-left hover:opacity-80"
+                      onClick={() => openEdit(u)}
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-white">
                         {avatarChar(u.name)}
                       </span>
-                      <span className="font-medium text-slate-900">{u.name}</span>
-                    </div>
+                      <span className="font-medium text-slate-900 underline-offset-2 hover:underline">
+                        {u.name}
+                      </span>
+                    </button>
                   </td>
                   <td className="px-4 py-3 font-mono text-amber-800">{u.loginId ?? '—'}</td>
                   <td className="px-4 py-3">
@@ -325,40 +408,21 @@ export default function UserPermissions() {
                       {u.status === 'active' ? '啟用' : '停權'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-1">
-                      <button
-                        type="button"
-                        title="編輯與權限"
-                        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-amber-700"
-                        onClick={() => openEdit(u)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        title="重設密碼"
-                        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-amber-700"
-                        onClick={() => {
-                          setPwdError(null);
-                          setPwdNew('');
-                          setPwdNew2('');
-                          setPwdFor(u);
-                        }}
-                      >
-                        <KeyRound className="h-4 w-4" />
-                      </button>
-                    </div>
+                  <td className="px-4 py-3">
+                    <UserRowActions
+                      onEdit={() => openEdit(u)}
+                      onResetPassword={() => openPasswordReset(u)}
+                    />
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        {!loading && filtered.length === 0 && (
-          <p className="py-8 text-center text-sm text-slate-400">沒有符合條件的使用者。</p>
-        )}
-      </div>
+              ))}
+            </tbody>
+          </table>
+          {filtered.length === 0 && (
+            <p className="py-8 text-center text-sm text-slate-400">沒有符合條件的使用者。</p>
+          )}
+        </div>
+      )}
 
       {addOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ConfirmDialog } from '@/components/Modal';
 import Sidebar, { type NavViewId } from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 import AccessDenied from '@/components/AccessDenied';
@@ -18,18 +19,20 @@ import Dashboard from '@/views/Dashboard';
 import Inventory from '@/views/Inventory';
 import OrdersView from '@/views/Orders';
 import Treasury from '@/views/Treasury';
+import LedgerView from '@/views/Ledger';
 import LoginScreen from '@/views/LoginScreen';
 import UserPermissions from '@/views/UserPermissions';
 
 const VIEW_TITLES: Record<NavViewId, string> = {
-  dashboard: '中古手錶職人進銷存管理系統',
+  dashboard: '營運概況',
   inventory: '庫存管理',
   orders: '訂單管理',
   treasury: '金流管理',
+  ledger: '收支記帳',
   users: '帳號與權限',
 };
 
-const NAV_ORDER: NavViewId[] = ['dashboard', 'inventory', 'orders', 'treasury', 'users'];
+const NAV_ORDER: NavViewId[] = ['dashboard', 'inventory', 'orders', 'treasury', 'ledger', 'users'];
 
 function firstAllowedView(can: (key: PermissionKey) => boolean): NavViewId {
   for (const id of NAV_ORDER) {
@@ -43,7 +46,12 @@ function AppShell() {
   const { can, logout } = useAuth();
   const [currentView, setCurrentView] = useState<NavViewId>('dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const isNarrow = useIsNarrowScreen();
+
+  const requestLogout = useCallback(() => setLogoutConfirmOpen(true), []);
+
+  const performLogout = useCallback(() => logout(), [logout]);
 
   useEffect(() => {
     const perm = NAV_VIEW_PERMISSION[currentView];
@@ -64,6 +72,8 @@ function AppShell() {
         return <OrdersView />;
       case 'treasury':
         return <Treasury />;
+      case 'ledger':
+        return <LedgerView />;
       case 'users':
         return <UserPermissions />;
       default:
@@ -78,20 +88,30 @@ function AppShell() {
   };
 
   return (
-    <div className="flex min-h-dvh bg-slate-50">
+    <div className="flex h-dvh min-h-dvh overflow-hidden bg-slate-50">
       <Sidebar
         currentView={currentView}
         setCurrentView={setCurrentView}
         isOpen={menuOpen || !isNarrow}
         setIsOpen={setMenuOpen}
         can={can}
-        onLogout={logout}
+        onLogout={requestLogout}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar title={VIEW_TITLES[currentView]} onMenuClick={() => setMenuOpen(true)} onLogout={logout} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <Topbar title={VIEW_TITLES[currentView]} onMenuClick={() => setMenuOpen(true)} />
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <ConfirmDialog
+          open={logoutConfirmOpen}
+          title="登出"
+          message="確定要登出？"
+          confirmLabel="登出"
+          danger
+          onConfirm={performLogout}
+          onClose={() => setLogoutConfirmOpen(false)}
+        />
+
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
           {isNarrow && (
             <h2 className="mb-4 text-lg font-bold text-slate-900">{VIEW_TITLES[currentView]}</h2>
           )}
@@ -108,8 +128,9 @@ function AuthenticatedApp() {
 
   const syncSession = useCallback(() => {
     const s = readSession();
-    if (s && validateSession(s)) setSession(s);
-    else {
+    if (s && validateSession(s)) {
+      setSession(s);
+    } else {
       clearSession();
       setSession(null);
     }

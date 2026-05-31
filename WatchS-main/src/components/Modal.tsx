@@ -87,3 +87,45 @@ export function DangerButton(props: React.ButtonHTMLAttributes<HTMLButtonElement
     />
   );
 }
+
+type ConfirmDialogProps = {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+};
+
+export function ConfirmDialog({
+  open,
+  title,
+  message,
+  confirmLabel = '確定',
+  cancelLabel = '取消',
+  danger,
+  onConfirm,
+  onClose,
+}: ConfirmDialogProps) {
+  return (
+    <Modal open={open} title={title} onClose={onClose}>
+      <p className="text-sm text-slate-600">{message}</p>
+      <div className="mt-6 flex justify-end gap-2">
+        <SecondaryButton type="button" onClick={onClose}>
+          {cancelLabel}
+        </SecondaryButton>
+        {danger ? (
+          <DangerButton type="button" onClick={onConfirm}>
+            {confirmLabel}
+          </DangerButton>
+        ) : (
+          <PrimaryButton type="button" onClick={onConfirm}>
+            {confirmLabel}
+          </PrimaryButton>
+        )}
+      </div>
+    </Modal>
+  );
+}
