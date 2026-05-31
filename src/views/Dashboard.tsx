@@ -37,7 +37,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [items, setItems] = useState<WatchItem[]>([]);
   const [orderList, setOrderList] = useState<WatchOrder[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<Awaited<ReturnType<typeof ledger.list>>>([]);
-  const [seeding, setSeeding] = useState(false);
   const [salesFilter, setSalesFilter] = useState<SalesFilterMode>('month');
   const [customStartYmd, setCustomStartYmd] = useState(() => periodStartYmd('month'));
   const [customEndYmd, setCustomEndYmd] = useState(() => todayYmd());
@@ -131,40 +130,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
   const maxBucketUnits = Math.max(1, ...periodPriceBuckets.map((b) => b.unitsSold));
 
-  const seedDemo = async () => {
-    setSeeding(true);
-    try {
-      const item1 = await inventory.create({
-        style: { brand: 'Rolex', model: 'Submariner', reference: '126610LN', description: '黑水鬼 41mm' },
-        rmbCost: 68_000,
-        exchangeRate: 4.52,
-        twdShippingFee: 2_500,
-      });
-      await inventory.create({
-        style: { brand: 'Omega', model: 'Speedmaster', reference: '310.30.42.50.01.001', description: '月球錶' },
-        rmbCost: 42_000,
-        exchangeRate: 4.48,
-        twdShippingFee: 1_800,
-      });
-      await orders.create({
-        watchItemId: item1.id,
-        salePriceTwd: 420_000,
-        customerName: '王先生',
-        initialPayment: {
-          paymentType: 'deposit',
-          amountTwd: 100_000,
-          account: '國泰CUBE',
-          dateYmd: new Date().toISOString().slice(0, 10),
-        },
-      });
-      await reload();
-    } finally {
-      setSeeding(false);
-    }
-  };
-
-  const isEmpty = items.length === 0 && orderList.length === 0;
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -172,11 +137,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <LayoutDashboard className="h-6 w-6 text-amber-600" />
           <h2 className="text-xl font-bold text-slate-900">營運概況</h2>
         </div>
-        {isEmpty && (
-          <PrimaryButton onClick={() => void seedDemo()} disabled={seeding}>
-            {seeding ? '載入中…' : '載入示範資料'}
-          </PrimaryButton>
-        )}
       </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -357,7 +317,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="mb-4 text-sm font-semibold text-slate-800">最近庫存</h3>
         {items.length === 0 ? (
-          <p className="text-sm text-slate-500">尚無庫存，請至「庫存管理」新增，或載入示範資料。</p>
+          <p className="text-sm text-slate-500">尚無庫存，請至「庫存管理」新增。</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-sm">
