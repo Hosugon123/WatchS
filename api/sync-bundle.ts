@@ -20,14 +20,15 @@ type PutBody = {
 
 function internalErrorResponse(e: unknown): Response {
   const message = e instanceof Error ? e.message : 'unknown error';
-  return Response.json({ ok: false, error: 'sync bundle failed', message }, { status: 500 });
+  const stack = e instanceof Error ? e.stack?.split('\n').slice(0, 3).join('\n') : undefined;
+  return Response.json({ ok: false, error: 'sync bundle failed', message, stack }, { status: 500 });
 }
 
 async function handleGet(req: Request): Promise<Response> {
   const authErr = assertSyncAuthorized(req);
   if (authErr) return authErr;
 
-  if (!isRedisConfigured()) {
+  if (!(await isRedisConfigured())) {
     return storageUnavailableResponse();
   }
 
@@ -50,7 +51,7 @@ async function handlePut(req: Request): Promise<Response> {
     return Response.json({ ok: false, error: 'bundle 格式不符' }, { status: 400 });
   }
 
-  if (!isRedisConfigured()) {
+  if (!(await isRedisConfigured())) {
     return storageUnavailableResponse();
   }
 
@@ -83,31 +84,11 @@ async function handlePut(req: Request): Promise<Response> {
   return Response.json({ ok: true, bundle });
 }
 
-/** Vercel Web Handler（fetch 入口，相容 Vite 非 Next 專案） */
-export default {
-  async fetch(request: Request): Promise<Response> {
-    try {
-      if (request.method === 'GET') return await handleGet(request);
-      if (request.method === 'PUT') return await handlePut(request);
-      return Response.json({ ok: false, error: 'Method Not Allowed' }, { status: 405 });
-    } catch (e) {
-      return internalErrorResponse(e);
-    }
-  },
-};
-
-/** 保留具名匯出，供部分執行環境使用 */
-export async function GET(req: Request): Promise<Response> {
+export default async function handler(request: Request): Promise<Response> {
   try {
-    return await handleGet(req);
-  } catch (e) {
-    return internalErrorResponse(e);
-  }
-}
-
-export async function PUT(req: Request): Promise<Response> {
-  try {
-    return await handlePut(req);
+    if (request.method === 'GET') return await handleGet(request);
+    if (request.method === 'PUT') return await handlePut(request);
+    return Response.json({ ok: false, error: 'Method Not Allowed' }, { status: 405 });
   } catch (e) {
     return internalErrorResponse(e);
   }

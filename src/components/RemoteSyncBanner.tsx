@@ -18,9 +18,11 @@ function statusMessage(status: RemoteSyncStatus): string | null {
     case 'offline':
       return '目前無法連線雲端，變更僅保存在此瀏覽器。恢復連線後請重新整理頁面。';
     case 'auth_error':
-      return '雲端同步授權失敗，請確認 Vercel 環境變數 VITE_API_SYNC_TOKEN 與 API_SYNC_TOKEN 一致。';
+      return '雲端同步授權失敗，請確認 Vercel 環境變數 VITE_API_SYNC_TOKEN 與 API_SYNC_TOKEN 完全相同，並重新 Deploy。';
+    case 'storage_error':
+      return '雲端 Redis 未就緒（503）。請確認已安裝 Upstash 且存在 KV_REST_API_URL、KV_REST_API_TOKEN（不必手動加 UPSTASH_*）。';
     case 'error':
-      return '雲端同步發生錯誤，請稍後再試或聯絡管理員。';
+      return '雲端同步發生錯誤（500）。請到 Vercel → Deployments → Functions 查看 sync-bundle 日誌，並確認已 Redeploy 最新程式。';
     default:
       return null;
   }
@@ -44,7 +46,12 @@ export default function RemoteSyncBanner() {
   const message = statusMessage(status);
   const show =
     getStorageMode() === 'remote' &&
-    (status === 'version_conflict' || status === 'stale' || status === 'offline' || status === 'auth_error' || status === 'error');
+    (status === 'version_conflict' ||
+      status === 'stale' ||
+      status === 'offline' ||
+      status === 'auth_error' ||
+      status === 'storage_error' ||
+      status === 'error');
 
   const onReload = useCallback(async () => {
     setBusy(true);
@@ -62,7 +69,7 @@ export default function RemoteSyncBanner() {
 
   if (!show || !message) return null;
 
-  const isDanger = status === 'version_conflict' || status === 'auth_error';
+  const isDanger = status === 'version_conflict' || status === 'auth_error' || status === 'storage_error';
 
   return (
     <div

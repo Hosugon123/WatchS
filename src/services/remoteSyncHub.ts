@@ -20,6 +20,7 @@ export type RemoteSyncStatus =
   | 'ok'
   | 'offline'
   | 'auth_error'
+  | 'storage_error'
   | 'error'
   | 'version_conflict'
   | 'stale';
@@ -94,6 +95,7 @@ function isNetworkishError(e: unknown): boolean {
 
 function statusFromResponse(res: Response): RemoteSyncStatus {
   if (res.status === 401 || res.status === 403) return 'auth_error';
+  if (res.status === 503) return 'storage_error';
   return 'error';
 }
 
@@ -193,7 +195,7 @@ function applySyncFailureFromUnknown(e: unknown): void {
   if (isVersionConflictError(e)) return;
   if (e && typeof e === 'object' && 'syncStatus' in e) {
     const s = (e as { syncStatus?: RemoteSyncStatus }).syncStatus;
-    if (s === 'auth_error' || s === 'error') {
+    if (s === 'auth_error' || s === 'storage_error' || s === 'error') {
       dispatchStatus(s);
       return;
     }
