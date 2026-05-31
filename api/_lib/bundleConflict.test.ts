@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ShengwatchDataBundleV1 } from '../../src/lib/appDataBundle';
+import type { ShengwatchDataBundleV1 } from './bundleTypes';
 import { bundleUpdatedAt, shouldRejectPush } from './bundleConflict';
 
 function bundle(updatedAt: number): ShengwatchDataBundleV1 {

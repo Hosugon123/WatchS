@@ -1,4 +1,5 @@
-import type { ShengwatchDataBundleV1 } from '../../src/lib/appDataBundle';
+import type { ShengwatchDataBundleV1 } from './bundleTypes';
+import { SHENGWATCH_APP_ID, SHENGWATCH_BUNDLE_FORMAT, SHENGWATCH_DATA_BUNDLE_VERSION } from './bundleTypes';
 
 export const KV_BUNDLE_KEY = 'shengwatch:bundle:v1';
 
@@ -24,11 +25,17 @@ export function shouldRejectPush(
 
 export function emptyRemoteBundle(): ShengwatchDataBundleV1 {
   return {
-    bundleVersion: 1,
-    app: 'shengwatch',
+    bundleVersion: SHENGWATCH_DATA_BUNDLE_VERSION,
+    app: SHENGWATCH_APP_ID,
     exportedAt: new Date(0).toISOString(),
     updatedAt: 0,
-    format: 'shengwatch-localStorage-snapshot-v1',
+    format: SHENGWATCH_BUNDLE_FORMAT,
     keys: {},
   };
+}
+
+export function isValidBundle(b: unknown): b is ShengwatchDataBundleV1 {
+  if (b == null || typeof b !== 'object') return false;
+  const o = b as ShengwatchDataBundleV1;
+  return o.app === SHENGWATCH_APP_ID && o.format === SHENGWATCH_BUNDLE_FORMAT && o.bundleVersion === 1;
 }

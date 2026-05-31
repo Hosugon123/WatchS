@@ -1,12 +1,22 @@
 import { Redis } from '@upstash/redis';
-import type { ShengwatchDataBundleV1 } from '../../src/lib/appDataBundle';
+import type { ShengwatchDataBundleV1 } from './bundleTypes';
 import { KV_BUNDLE_KEY, emptyRemoteBundle } from './bundleConflict';
 
 function redisClient(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
-  if (!url?.trim() || !token?.trim()) return null;
-  return new Redis({ url: url.trim(), token: token.trim() });
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL?.trim() ||
+    process.env.KV_REST_API_URL?.trim() ||
+    '';
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ||
+    process.env.KV_REST_API_TOKEN?.trim() ||
+    '';
+  if (!url || !token) return null;
+  try {
+    return new Redis({ url, token });
+  } catch {
+    return null;
+  }
 }
 
 export async function loadServerBundle(): Promise<ShengwatchDataBundleV1 | null> {
@@ -33,7 +43,7 @@ export function storageUnavailableResponse(): Response {
     {
       ok: false,
       error:
-        '雲端儲存未設定。請在 Vercel 專案安裝 Upstash Redis（或既有 KV），並確認已注入 UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN（或 KV_REST_API_*）。',
+        '雲端儲存未設定。請在 Vercel 專案安裝 Upstash Redis，並確認已注入 UPSTASH_REDIS_REST_* 或 KV_REST_API_*。',
     },
     { status: 503 },
   );

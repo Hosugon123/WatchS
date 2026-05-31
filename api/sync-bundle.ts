@@ -1,6 +1,6 @@
-import type { ShengwatchDataBundleV1 } from '../src/lib/appDataBundle';
 import { assertSyncAuthorized } from './_lib/auth';
-import { bundleUpdatedAt, shouldRejectPush } from './_lib/bundleConflict';
+import { bundleUpdatedAt, isValidBundle, shouldRejectPush } from './_lib/bundleConflict';
+import type { ShengwatchDataBundleV1 } from './_lib/bundleTypes';
 import {
   getBundleForGet,
   isRedisConfigured,
@@ -18,13 +18,12 @@ type PutBody = {
   syncedFromUpdatedAt?: number;
 };
 
-function isValidBundle(b: unknown): b is ShengwatchDataBundleV1 {
-  if (b == null || typeof b !== 'object') return false;
-  const o = b as ShengwatchDataBundleV1;
-  return o.app === 'shengwatch' && o.format === 'shengwatch-localStorage-snapshot-v1' && o.bundleVersion === 1;
+function internalErrorResponse(e: unknown): Response {
+  const message = e instanceof Error ? e.message : 'unknown error';
+  return Response.json({ ok: false, error: 'sync bundle failed', message }, { status: 500 });
 }
 
-export async function GET(req: Request): Promise<Response> {
+async function handleGet(req: Request): Promise<Response> {
   const authErr = assertSyncAuthorized(req);
   if (authErr) return authErr;
 
@@ -36,7 +35,7 @@ export async function GET(req: Request): Promise<Response> {
   return Response.json({ ok: true, bundle: getBundleForGet(stored) });
 }
 
-export async function PUT(req: Request): Promise<Response> {
+async function handlePut(req: Request): Promise<Response> {
   const authErr = assertSyncAuthorized(req);
   if (authErr) return authErr;
 
@@ -69,7 +68,7 @@ export async function PUT(req: Request): Promise<Response> {
   }
 
   const bundle: ShengwatchDataBundleV1 = {
-    ...body.bundle,
+    ...body.bundle!,
     updatedAt: Date.now(),
   };
 
@@ -82,4 +81,34 @@ export async function PUT(req: Request): Promise<Response> {
   }
 
   return Response.json({ ok: true, bundle });
+}
+
+/** Vercel Web Handler（fetch 入口，相容 Vite 非 Next 專案） */
+export default {
+  async fetch(request: Request): Promise<Response> {
+    try {
+      if (request.method === 'GET') return await handleGet(request);
+      if (request.method === 'PUT') return await handlePut(request);
+      return Response.json({ ok: false, error: 'Method Not Allowed' }, { status: 405 });
+    } catch (e) {
+      return internalErrorResponse(e);
+    }
+  },
+};
+
+/** 保留具名匯出，供部分執行環境使用 */
+export async function GET(req: Request): Promise<Response> {
+  try {
+    return await handleGet(req);
+  } catch (e) {
+    return internalErrorResponse(e);
+  }
+}
+
+export async function PUT(req: Request): Promise<Response> {
+  try {
+    return await handlePut(req);
+  } catch (e) {
+    return internalErrorResponse(e);
+  }
 }
