@@ -20,7 +20,7 @@ function statusMessage(status: RemoteSyncStatus): string | null {
     case 'auth_error':
       return '雲端同步授權失敗，請確認 Vercel 環境變數 VITE_API_SYNC_TOKEN 與 API_SYNC_TOKEN 完全相同，並重新 Deploy。';
     case 'storage_error':
-      return '雲端 Redis 未就緒（503）。請確認已安裝 Upstash 且存在 KV_REST_API_URL、KV_REST_API_TOKEN（不必手動加 UPSTASH_*）。';
+      return '雲端 Redis 未就緒（503）。請確認 Vercel 已安裝 Upstash 且存在 REDIS_URL、API_SYNC_TOKEN。';
     case 'error':
       return '雲端同步發生錯誤（500）。請到 Vercel → Deployments → Functions 查看 sync-bundle 日誌，並確認已 Redeploy 最新程式。';
     default:
