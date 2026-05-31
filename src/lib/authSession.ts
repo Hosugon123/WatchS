@@ -49,6 +49,7 @@ export function writeSession(session: AuthSession): void {
 }
 
 export function clearSession(): void {
+  if (!localStorage.getItem(SESSION_KEY)) return;
   localStorage.removeItem(SESSION_KEY);
   dispatchChanged();
 }

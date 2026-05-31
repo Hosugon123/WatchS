@@ -7,6 +7,8 @@ export const PERMISSION_KEYS = [
   'edit_orders',
   'view_treasury',
   'edit_treasury',
+  'view_ledger',
+  'edit_ledger',
   'manage_users',
   'reset_data',
 ] as const;
@@ -30,6 +32,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: 'view_inventory', label: '庫存管理（檢視）' },
       { key: 'view_orders', label: '訂單管理（檢視）' },
       { key: 'view_treasury', label: '金流管理（檢視）' },
+      { key: 'view_ledger', label: '收支記帳（檢視）' },
     ],
   },
   {
@@ -48,6 +51,11 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     keys: [{ key: 'edit_treasury', label: '轉帳／期初／廠商還款等', hint: '需一併勾選「金流管理（檢視）」' }],
   },
   {
+    id: 'ledger',
+    label: '收支記帳',
+    keys: [{ key: 'edit_ledger', label: '新增／編輯／刪除記帳', hint: '需一併勾選「收支記帳（檢視）」' }],
+  },
+  {
     id: 'system',
     label: '系統管理',
     keys: [
@@ -63,5 +71,6 @@ export const NAV_VIEW_PERMISSION: Record<string, PermissionKey> = {
   inventory: 'view_inventory',
   orders: 'view_orders',
   treasury: 'view_treasury',
+  ledger: 'view_ledger',
   users: 'manage_users',
 };

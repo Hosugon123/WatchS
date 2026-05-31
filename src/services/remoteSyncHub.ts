@@ -4,6 +4,7 @@
 import {
   SHENGWATCH_EXPORT_STORAGE_KEYS,
   buildShengwatchDataBundleForPush,
+  dispatchShengwatchStorageSyncEvents,
   importShengwatchDataBundle,
   parseBundleJson,
   serializeShengwatchDataBundle,
@@ -20,7 +21,8 @@ export type RemoteSyncStatus =
   | 'offline'
   | 'auth_error'
   | 'error'
-  | 'version_conflict';
+  | 'version_conflict'
+  | 'stale';
 
 export class RemoteVersionConflictError extends Error {
   readonly code = 'VERSION_CONFLICT' as const;
@@ -34,6 +36,10 @@ export class RemoteVersionConflictError extends Error {
 let lastStatus: RemoteSyncStatus = 'idle';
 let lastRemoteUpdatedAt = 0;
 let remoteSyncLocked = false;
+let refreshInFlight = false;
+let listenersStarted = false;
+
+const SESSION_KEY_PREFIX = 'shengwatch_session';
 
 export function getRemoteSyncStatus(): RemoteSyncStatus {
   return lastStatus;
@@ -41,6 +47,10 @@ export function getRemoteSyncStatus(): RemoteSyncStatus {
 
 export function isRemoteSyncLocked(): boolean {
   return remoteSyncLocked;
+}
+
+export function unlockRemoteSync(): void {
+  remoteSyncLocked = false;
 }
 
 function noteRemoteBundleUpdatedAt(bundle: ShengwatchDataBundleV1 | null | undefined): void {
@@ -171,7 +181,12 @@ export async function pushRemoteBundle(bundleText?: string): Promise<void> {
     throw Object.assign(new Error(`PUT ${res.status}`), { syncStatus: statusFromResponse(res) });
   }
 
-  noteRemoteBundleUpdatedAt(bundle);
+  const body = (await res.json()) as { ok?: boolean; bundle?: ShengwatchDataBundleV1 };
+  if (body?.bundle) {
+    noteRemoteBundleUpdatedAt(body.bundle);
+  } else {
+    noteRemoteBundleUpdatedAt(bundle);
+  }
 }
 
 function applySyncFailureFromUnknown(e: unknown): void {
@@ -187,9 +202,73 @@ function applySyncFailureFromUnknown(e: unknown): void {
   else dispatchStatus('error');
 }
 
+/** 從雲端重新載入（版本衝突後由使用者確認）。 */
+export async function reloadFromRemoteAfterConflict(): Promise<void> {
+  unlockRemoteSync();
+  const bundle = await fetchRemoteBundle();
+  if (!isRemoteBundleEffectivelyEmpty(bundle)) {
+    const result = importShengwatchDataBundle(bundle);
+    if (!result.ok) {
+      dispatchStatus('error');
+      return;
+    }
+  }
+  noteRemoteBundleUpdatedAt(bundle);
+  dispatchStatus('ok');
+}
+
+/** 若雲端比本機記憶的版本新，標記為 stale（不自動覆寫本機）。 */
+export async function checkRemoteNewer(): Promise<void> {
+  if (getStorageMode() !== 'remote' || remoteSyncLocked || refreshInFlight) return;
+  refreshInFlight = true;
+  try {
+    const bundle = await fetchRemoteBundle();
+    const remoteTs = bundle.updatedAt ?? 0;
+    if (remoteTs > lastRemoteUpdatedAt && !isRemoteBundleEffectivelyEmpty(bundle)) {
+      dispatchStatus('stale');
+    } else if (lastStatus === 'stale') {
+      dispatchStatus('ok');
+    }
+  } catch (e) {
+    applySyncFailureFromUnknown(e);
+  } finally {
+    refreshInFlight = false;
+  }
+}
+
+/** 載入雲端較新版本（stale 橫幅用）。 */
+export async function applyRemoteIfNewer(): Promise<boolean> {
+  if (getStorageMode() !== 'remote') return false;
+  unlockRemoteSync();
+  try {
+    const bundle = await fetchRemoteBundle();
+    const remoteTs = bundle.updatedAt ?? 0;
+    if (remoteTs <= lastRemoteUpdatedAt || isRemoteBundleEffectivelyEmpty(bundle)) {
+      dispatchStatus('ok');
+      return false;
+    }
+    const result = importShengwatchDataBundle(bundle);
+    if (!result.ok) {
+      dispatchStatus('error');
+      return false;
+    }
+    noteRemoteBundleUpdatedAt(bundle);
+    dispatchStatus('ok');
+    return true;
+  } catch (e) {
+    applySyncFailureFromUnknown(e);
+    return false;
+  }
+}
+
 export async function initRemoteSyncOnAppLoad(): Promise<void> {
   if (getStorageMode() !== 'remote') {
     dispatchStatus('idle');
+    return;
+  }
+
+  if (!getApiSyncToken()) {
+    dispatchStatus('auth_error');
     return;
   }
 
@@ -214,6 +293,31 @@ export async function initRemoteSyncOnAppLoad(): Promise<void> {
   } catch (e) {
     applySyncFailureFromUnknown(e);
   }
+}
+
+export function startRemoteSyncListeners(): void {
+  if (getStorageMode() !== 'remote' || listenersStarted) return;
+  listenersStarted = true;
+
+  window.addEventListener('storage', (e) => {
+    if (!e.key || e.key.startsWith(SESSION_KEY_PREFIX)) return;
+    if (!SHENGWATCH_EXPORT_STORAGE_KEYS.includes(e.key as (typeof SHENGWATCH_EXPORT_STORAGE_KEYS)[number])) {
+      return;
+    }
+    dispatchShengwatchStorageSyncEvents();
+    if (lastStatus === 'stale' || lastStatus === 'version_conflict') return;
+    dispatchStatus('ok');
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      void checkRemoteNewer();
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    void checkRemoteNewer();
+  });
 }
 
 export async function pushRemoteIfLocalBundleChangedSince(snapshot: string): Promise<void> {

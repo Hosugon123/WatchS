@@ -1,4 +1,4 @@
-import { CheckCircle2, Pencil, Plus, ShoppingCart, Wallet } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Pencil, Plus, ShoppingCart, Wallet } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import AccountField from '@/components/AccountField';
@@ -34,7 +34,6 @@ const EMPTY_CREATE_FORM = {
   watchItemId: '',
   brand: '',
   model: '',
-  reference: '',
   description: '',
   rmbCost: '',
   exchangeRate: '',
@@ -84,6 +83,7 @@ export default function OrdersView() {
     dateYmd: todayYmd(),
     note: '',
   });
+  const [orderDetailOpen, setOrderDetailOpen] = useState(false);
 
   const reload = useCallback(async () => {
     const [o, i, vs] = await Promise.all([orders.list(), inventory.list(), treasury.listVendorSummaries()]);
@@ -173,6 +173,16 @@ export default function OrdersView() {
     return calcProfitTwd(selected.salePriceTwd, selectedTotalCost);
   }, [selected, selectedTotalCost]);
 
+  const selectOrder = (orderId: string) => {
+    if (orderId === selectedId) {
+      setOrderDetailOpen((open) => !open);
+    } else {
+      setSelectedId(orderId);
+      setOrderDetailOpen(true);
+    }
+    setMsg(null);
+  };
+
   const createOrder = async () => {
     const salePriceTwd = Number(createForm.salePriceTwd);
     if (!salePriceTwd) {
@@ -229,7 +239,6 @@ export default function OrdersView() {
               orderStyle: {
                 brand: createForm.brand.trim(),
                 model: createForm.model.trim(),
-                reference: createForm.reference.trim() || undefined,
                 description: createForm.description.trim() || undefined,
               },
               ...(Number(createForm.rmbCost) > 0 && Number(createForm.exchangeRate) > 0
@@ -422,85 +431,135 @@ export default function OrdersView() {
         </p>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
-        <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">訂單列表</p>
+      <div className="space-y-4">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <h3 className="text-sm font-semibold text-slate-800">訂單列表</h3>
+            <span className="text-xs text-slate-500 tabular-nums">共 {orderList.length} 筆</span>
+          </div>
           {orderList.length === 0 ? (
-            <p className="px-2 py-6 text-center text-sm text-slate-400">尚無訂單</p>
+            <p className="px-4 py-10 text-center text-sm text-slate-400">尚無訂單，請建立訂單</p>
           ) : (
-            orderList.map((order) => {
-              const item = items.find((x) => x.id === order.watchItemId);
-              const paid = sumPaymentsTwd(order.payments);
-              const active = order.id === selectedId;
-              return (
-                <button
-                  key={order.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(order.id);
-                    setMsg(null);
-                  }}
-                  className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
-                    active ? 'border-amber-300 bg-amber-50' : 'border-transparent hover:bg-slate-50'
-                  }`}
-                >
-                  <p className="font-medium text-slate-900">{orderDisplayLabel(order, item)}</p>
-                  <p className="text-xs text-slate-500">
-                    {order.customerName || '未命名客戶'}
-                    <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
-                      {WATCH_ORDER_SOURCE_LABELS[order.source ?? (order.watchItemId ? 'inventory' : 'customer')]}
-                    </span>
-                  </p>
-                  <div className="mt-1 flex items-center justify-between text-xs">
-                    <span className="tabular-nums text-slate-600">{formatTwd(order.salePriceTwd)}</span>
-                    {order.isCompleted ? (
-                      <span className="text-emerald-600">已結案</span>
-                    ) : (
-                      <span className="text-amber-600">
-                        已收 {formatTwd(paid)}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2.5 font-medium">款式</th>
+                    <th className="px-4 py-2.5 font-medium">客戶</th>
+                    <th className="px-4 py-2.5 font-medium">類型</th>
+                    <th className="px-4 py-2.5 font-medium text-right">售價</th>
+                    <th className="px-4 py-2.5 font-medium text-right">已收</th>
+                    <th className="px-4 py-2.5 font-medium text-right">待收</th>
+                    <th className="px-4 py-2.5 font-medium">狀態</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orderList.map((order) => {
+                    const item = items.find((x) => x.id === order.watchItemId);
+                    const paid = sumPaymentsTwd(order.payments);
+                    const pending = Math.max(0, order.salePriceTwd - paid);
+                    const active = order.id === selectedId;
+                    const source =
+                      order.source ?? (order.watchItemId ? 'inventory' : 'customer');
+                    return (
+                      <tr
+                        key={order.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => selectOrder(order.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            selectOrder(order.id);
+                          }
+                        }}
+                        className={`cursor-pointer border-t border-slate-100 transition-colors hover:bg-slate-50 ${
+                          active ? 'bg-amber-50/80' : ''
+                        }`}
+                      >
+                        <td className="px-4 py-2.5 font-medium text-slate-900">
+                          {orderDisplayLabel(order, item)}
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-600">{order.customerName || '—'}</td>
+                        <td className="px-4 py-2.5 text-slate-600">{WATCH_ORDER_SOURCE_LABELS[source]}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{formatTwd(order.salePriceTwd)}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-blue-600">
+                          {formatTwd(paid)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-amber-700">
+                          {order.isCompleted ? '—' : formatTwd(pending)}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                              order.isCompleted
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {order.isCompleted ? '已結案' : '進行中'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
-        {selected ? (
-          <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">
+        {selected && (
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+              onClick={() => setOrderDetailOpen((open) => !open)}
+              aria-expanded={orderDetailOpen}
+            >
+              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-sm font-semibold text-slate-800">訂單明細</span>
+                <span className="truncate text-sm text-slate-600">
                   {orderDisplayLabel(selected, selectedItem)}
-                </h3>
-                <p className="text-sm text-slate-500">
-                  {WATCH_ORDER_SOURCE_LABELS[selected.source ?? (selected.watchItemId ? 'inventory' : 'customer')]}
-                  {' · '}
-                  客戶：{selected.customerName || '—'} · 售價{' '}
-                  <span className="font-medium text-slate-800">{formatTwd(selected.salePriceTwd)}</span>
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {canEdit && !selected.isCompleted && (
-                  <button
-                    type="button"
-                    onClick={openEditOrder}
-                    className="rounded-lg p-2 text-slate-400 hover:bg-amber-50 hover:text-amber-700"
-                    title="編輯訂單"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                )}
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
-                    selected.isCompleted ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  {selected.isCompleted ? '已結案' : '進行中'}
                 </span>
-              </div>
-            </div>
+                <span className="text-xs text-slate-400">
+                  {selected.customerName || '未命名客戶'} · 售價 {formatTwd(selected.salePriceTwd)}
+                  {!selected.isCompleted && (
+                    <> · 待收 {formatTwd(Math.max(0, remaining))}</>
+                  )}
+                </span>
+              </span>
+              {orderDetailOpen ? (
+                <ChevronUp className="h-5 w-5 shrink-0 text-slate-400" aria-hidden />
+              ) : (
+                <ChevronDown className="h-5 w-5 shrink-0 text-slate-400" aria-hidden />
+              )}
+            </button>
+
+            {orderDetailOpen && (
+              <div className="space-y-4 border-t border-slate-100 p-5">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {canEdit && !selected.isCompleted && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditOrder();
+                      }}
+                      className="rounded-lg p-2 text-slate-400 hover:bg-amber-50 hover:text-amber-700"
+                      title="編輯訂單"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  )}
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${
+                      selected.isCompleted ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {selected.isCompleted ? '已結案' : '進行中'}
+                  </span>
+                </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
               <StatBox label="已收金額" value={formatTwd(paymentTotal)} color="text-blue-600" />
@@ -596,10 +655,8 @@ export default function OrdersView() {
                     : '已結案 · 客戶下單（未填成本，無法計算利潤）'}
               </div>
             )}
-          </div>
-        ) : (
-          <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white p-12 text-slate-400">
-            選擇左側訂單以管理金流
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -658,14 +715,7 @@ export default function OrdersView() {
                 />
               </div>
               <div>
-                <FieldLabel>官方編號</FieldLabel>
-                <TextInput
-                  value={createForm.reference}
-                  onChange={(e) => setCreateForm({ ...createForm, reference: e.target.value })}
-                />
-              </div>
-              <div>
-                <FieldLabel>需求描述</FieldLabel>
+                <FieldLabel>備註</FieldLabel>
                 <TextInput
                   value={createForm.description}
                   onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
@@ -715,19 +765,18 @@ export default function OrdersView() {
             </>
           )}
           <div className="sm:col-span-2 rounded-xl border border-rose-100 bg-rose-50/50 p-4">
-            <p className="mb-3 text-sm font-semibold text-rose-900">代付廠商（選填）</p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <p className="mb-3 text-sm font-semibold text-rose-900">代付廠商</p>
+            <div className="grid gap-4 sm:grid-cols-2 sm:items-start">
               <div>
-                <FieldLabel>代付廠商</FieldLabel>
+                <FieldLabel>廠商名稱</FieldLabel>
                 <VendorField
                   value={createForm.vendorPayableVendor}
                   onChange={(vendorPayableVendor) => setCreateForm({ ...createForm, vendorPayableVendor })}
                   suggestions={vendorNames}
                   placeholder="例如：深圳錶行、王老板"
                 />
-                <p className="mt-1 text-xs text-rose-600">填寫後，台幣成本將自動記入該廠商欠款</p>
               </div>
-              <div className="flex items-end">
+              <div>
                 <div className="w-full rounded-lg bg-white px-4 py-3 ring-1 ring-rose-100">
                   <p className="text-xs text-rose-700">記入廠商欠款（台幣）</p>
                   <p className="text-lg font-bold tabular-nums text-rose-800">
@@ -815,14 +864,7 @@ export default function OrdersView() {
                 />
               </div>
               <div>
-                <FieldLabel>官方編號</FieldLabel>
-                <TextInput
-                  value={editForm.reference}
-                  onChange={(e) => setEditForm({ ...editForm, reference: e.target.value })}
-                />
-              </div>
-              <div>
-                <FieldLabel>需求描述</FieldLabel>
+                <FieldLabel>備註</FieldLabel>
                 <TextInput
                   value={editForm.description}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
@@ -884,7 +926,7 @@ export default function OrdersView() {
             />
           </div>
           <div className="sm:col-span-2">
-            <FieldLabel>備註</FieldLabel>
+            <FieldLabel>訂單備註</FieldLabel>
             <TextInput
               value={editForm.note}
               onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}

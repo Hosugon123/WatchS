@@ -53,18 +53,23 @@ import {
 } from '../lib/accountTreasury';
 import * as systemUsers from '../lib/systemUsersStorage';
 import * as credentialStorage from '../lib/credentialStorage';
+import * as ledgerStorage from '../lib/ledgerStorage';
 import {
   initRemoteSyncOnAppLoad,
+  startRemoteSyncListeners,
   withRemoteStorageRead,
   withRemoteStorageWrite,
 } from './remoteSyncHub';
 
 export {
   initRemoteSyncOnAppLoad,
+  startRemoteSyncListeners,
   withRemoteStorageRead,
   withRemoteStorageWrite,
   getRemoteSyncStatus,
   isRemoteSyncLocked,
+  reloadFromRemoteAfterConflict,
+  applyRemoteIfNewer,
   REMOTE_SYNC_STATUS_EVENT,
   REMOTE_SYNC_VERSION_CONFLICT_EVENT,
 } from './remoteSyncHub';
@@ -358,6 +363,34 @@ export const treasury = {
       paymentAccounts.addCommonPaymentAccount(input.fromAccount);
       return entry;
     });
+  },
+};
+
+// ——— 收支記帳 ———
+
+export type {
+  LedgerEntry,
+  LedgerEntryType,
+  NewLedgerEntryInput,
+  LedgerEntryUpdate,
+} from '../lib/ledgerStorage';
+export { LEDGER_ENTRY_TYPE_LABELS, LEDGER_ENTRIES_UPDATED_EVENT } from '../lib/ledgerStorage';
+
+export const ledger = {
+  async list(): Promise<ledgerStorage.LedgerEntry[]> {
+    return withRemoteStorageRead(() => ledgerStorage.listLedgerEntries());
+  },
+  async create(input: ledgerStorage.NewLedgerEntryInput): Promise<ledgerStorage.LedgerEntry> {
+    return withRemoteStorageWrite(() => ledgerStorage.createLedgerEntry(input));
+  },
+  async update(
+    id: string,
+    patch: ledgerStorage.LedgerEntryUpdate,
+  ): Promise<ledgerStorage.LedgerEntry | null> {
+    return withRemoteStorageWrite(() => ledgerStorage.updateLedgerEntry(id, patch));
+  },
+  async remove(id: string): Promise<boolean> {
+    return withRemoteStorageWrite(() => ledgerStorage.removeLedgerEntry(id));
   },
 };
 

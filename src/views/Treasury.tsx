@@ -5,6 +5,9 @@ import AccountField from '@/components/AccountField';
 import VendorField from '@/components/VendorField';
 import Modal, { FieldLabel, PrimaryButton, SecondaryButton, SelectInput, TextInput } from '@/components/Modal';
 import { formatTwd, todayYmd } from '@/lib/format';
+import { SALES_PERIOD_LABELS, type SalesPeriodId } from '@/lib/salesAnalytics';
+import { isYmdInPeriod, isYmdInRange, normalizeDateRange, periodStartYmd } from '@/lib/salesPeriod';
+import { cn } from '@/lib/utils';
 import { ACCOUNT_OPENING_BALANCES_UPDATED_EVENT } from '@/lib/accountOpeningBalanceStorage';
 import { ACCOUNT_TRANSFERS_UPDATED_EVENT } from '@/lib/accountTransferStorage';
 import { WATCH_ORDERS_UPDATED_EVENT } from '@/lib/watchOrderStorage';
@@ -27,6 +30,10 @@ import {
   type VendorPayableEntry,
   type VendorPayableSummary,
 } from '@/services';
+
+const MOVEMENT_PAGE_SIZE = 10;
+const MOVEMENT_DATE_PERIODS: SalesPeriodId[] = ['week', 'month', 'year'];
+type MovementDateFilter = 'all' | SalesPeriodId | 'custom';
 
 export default function TreasuryView() {
   const { can } = useAuth();
@@ -57,6 +64,10 @@ export default function TreasuryView() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [msgOk, setMsgOk] = useState(false);
+  const [movementDateFilter, setMovementDateFilter] = useState<MovementDateFilter>('all');
+  const [movementCustomStart, setMovementCustomStart] = useState(() => periodStartYmd('month'));
+  const [movementCustomEnd, setMovementCustomEnd] = useState(() => todayYmd());
+  const [movementPage, setMovementPage] = useState(1);
 
   const [form, setForm] = useState({
     fromAccount: '國泰CUBE',
@@ -146,6 +157,38 @@ export default function TreasuryView() {
     for (const b of balances) m.set(b.account, b.balanceTwd);
     return m;
   }, [balances]);
+
+  const filteredMovements = useMemo(() => {
+    if (movementDateFilter === 'all') return movements;
+    if (movementDateFilter === 'custom') {
+      const { startYmd, endYmd } = normalizeDateRange(movementCustomStart, movementCustomEnd);
+      return movements.filter((m) => isYmdInRange(m.dateYmd, startYmd, endYmd));
+    }
+    return movements.filter((m) => isYmdInPeriod(m.dateYmd, movementDateFilter));
+  }, [movements, movementDateFilter, movementCustomStart, movementCustomEnd]);
+
+  const movementPageCount = useMemo(
+    () => Math.max(1, Math.ceil(filteredMovements.length / MOVEMENT_PAGE_SIZE)),
+    [filteredMovements.length],
+  );
+
+  const pagedMovements = useMemo(() => {
+    const start = (movementPage - 1) * MOVEMENT_PAGE_SIZE;
+    return filteredMovements.slice(start, start + MOVEMENT_PAGE_SIZE);
+  }, [filteredMovements, movementPage]);
+
+  const movementPageNumbers = useMemo(
+    () => Array.from({ length: movementPageCount }, (_, i) => i + 1),
+    [movementPageCount],
+  );
+
+  useEffect(() => {
+    setMovementPage(1);
+  }, [movementDateFilter, movementCustomStart, movementCustomEnd]);
+
+  useEffect(() => {
+    if (movementPage > movementPageCount) setMovementPage(movementPageCount);
+  }, [movementPage, movementPageCount]);
 
   const openEditAccount = (balance: TreasuryAccountBalance) => {
     setEditAccount(balance.account);
@@ -410,42 +453,46 @@ export default function TreasuryView() {
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
-          <p className="text-sm text-amber-800">全部帳戶合計</p>
-          <p className="text-3xl font-bold tabular-nums text-amber-900">{formatTwd(totalBalance)}</p>
+      <section className="space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
+            <p className="text-sm text-amber-800">全部帳戶合計</p>
+            <p className="text-3xl font-bold tabular-nums text-amber-900">{formatTwd(totalBalance)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
+            <p className="text-sm text-slate-600">本人戶加總</p>
+            <p className="text-3xl font-bold tabular-nums text-slate-900">{formatTwd(ownBalance)}</p>
+          </div>
+          <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-5 shadow-sm">
+            <p className="text-sm text-violet-700">代收戶加總</p>
+            <p className="text-3xl font-bold tabular-nums text-violet-900">{formatTwd(proxyBalance)}</p>
+          </div>
+          <div className="rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-white p-5 shadow-sm">
+            <p className="text-sm text-rose-700">應付廠商合計</p>
+            <p className="text-3xl font-bold tabular-nums text-rose-900">{formatTwd(totalVendorPayable)}</p>
+          </div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
-          <p className="text-sm text-slate-600">本人戶加總</p>
-          <p className="text-3xl font-bold tabular-nums text-slate-900">{formatTwd(ownBalance)}</p>
-        </div>
-        <div className="rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-5 shadow-sm">
-          <p className="text-sm text-violet-700">代收戶加總</p>
-          <p className="text-3xl font-bold tabular-nums text-violet-900">{formatTwd(proxyBalance)}</p>
-        </div>
-        <div className="rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-white p-5 shadow-sm">
-          <p className="text-sm text-rose-700">應付廠商合計</p>
-          <p className="text-3xl font-bold tabular-nums text-rose-900">{formatTwd(totalVendorPayable)}</p>
-        </div>
-      </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {balances.map((b) => (
-          <AccountBalanceCard key={b.account} balance={b} onEdit={canEdit ? () => openEditAccount(b) : undefined} />
-        ))}
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => setAddAccountOpen(true)}
-            className="flex min-h-[8.5rem] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-white p-4 text-slate-400 transition-colors hover:border-amber-300 hover:bg-amber-50/50 hover:text-amber-700"
-          >
-            <Plus className="h-6 w-6" />
-            <span className="text-sm font-medium">新增帳戶</span>
-          </button>
-        )}
-      </div>
+        <div className="border-t border-slate-200" aria-hidden />
 
-      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {balances.map((b) => (
+            <AccountBalanceCard key={b.account} balance={b} onEdit={canEdit ? () => openEditAccount(b) : undefined} />
+          ))}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setAddAccountOpen(true)}
+              className="flex min-h-[8.5rem] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-white p-4 text-slate-400 transition-colors hover:border-amber-300 hover:bg-amber-50/50 hover:text-amber-700"
+            >
+              <Plus className="h-6 w-6" />
+              <span className="text-sm font-medium">新增帳戶</span>
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section className="space-y-4 border-t border-slate-200 pt-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
             <Truck className="h-4 w-4" />
@@ -480,70 +527,197 @@ export default function TreasuryView() {
             ))}
           </div>
         )}
-      </div>
+      </section>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-5 py-4">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <ArrowLeftRight className="h-4 w-4" />
-            資金異動紀錄
-          </h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">日期</th>
-                <th className="px-4 py-3 font-medium">類型</th>
-                <th className="px-4 py-3 font-semibold text-red-600">轉出</th>
-                <th className="px-4 py-3 font-medium">轉入</th>
-                <th className="px-4 py-3 font-medium text-right">金額</th>
-                <th className="px-4 py-3 font-medium">備註</th>
-              </tr>
-            </thead>
-            <tbody>
-              {movements.length === 0 ? (
+      <section className="border-t border-slate-200 pt-5">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <ArrowLeftRight className="h-4 w-4" />
+              資金異動紀錄
+            </h3>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setMovementDateFilter('all')}
+                    className={cn(
+                      'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                      movementDateFilter === 'all'
+                        ? 'bg-white text-amber-800 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900',
+                    )}
+                  >
+                    全部
+                  </button>
+                  {MOVEMENT_DATE_PERIODS.map((id) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setMovementDateFilter(id)}
+                      className={cn(
+                        'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                        movementDateFilter === id
+                          ? 'bg-white text-amber-800 shadow-sm'
+                          : 'text-slate-600 hover:text-slate-900',
+                      )}
+                    >
+                      {SALES_PERIOD_LABELS[id]}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setMovementDateFilter('custom')}
+                    className={cn(
+                      'rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                      movementDateFilter === 'custom'
+                        ? 'bg-white text-amber-800 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900',
+                    )}
+                  >
+                    自訂
+                  </button>
+                </div>
+                {movementDateFilter === 'custom' && (
+                  <div className="flex flex-wrap items-end gap-2">
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs font-medium text-slate-500">起始</span>
+                      <input
+                        type="date"
+                        value={movementCustomStart}
+                        max={movementCustomEnd}
+                        onChange={(e) => setMovementCustomStart(e.target.value)}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                      />
+                    </label>
+                    <span className="pb-2 text-slate-400">～</span>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs font-medium text-slate-500">結束</span>
+                      <input
+                        type="date"
+                        value={movementCustomEnd}
+                        min={movementCustomStart}
+                        max={todayYmd()}
+                        onChange={(e) => setMovementCustomEnd(e.target.value)}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                      />
+                    </label>
+                  </div>
+                )}
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
-                    尚無資金異動紀錄
-                  </td>
+                  <th className="px-4 py-3 font-medium">日期</th>
+                  <th className="px-4 py-3 font-medium">類型</th>
+                  <th className="px-4 py-3 font-semibold text-red-600">轉出</th>
+                  <th className="px-4 py-3 font-medium">轉入</th>
+                  <th className="px-4 py-3 font-medium text-right">金額</th>
+                  <th className="px-4 py-3 font-medium">備註</th>
                 </tr>
-              ) : (
-                movements.map((m) => (
-                  <tr key={m.id} className="border-t border-slate-100">
-                    <td className="px-4 py-3">{m.dateYmd}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                          m.kind === 'opening'
-                            ? 'bg-sky-100 text-sky-700'
-                            : m.kind === 'payment'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : m.kind === 'vendor_pay'
-                                ? 'bg-orange-100 text-orange-700'
-                                : 'bg-slate-100 text-slate-600'
+              </thead>
+              <tbody>
+                {movements.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                      尚無資金異動紀錄
+                    </td>
+                  </tr>
+                ) : filteredMovements.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                      此日期範圍內尚無紀錄
+                    </td>
+                  </tr>
+                ) : (
+                  pagedMovements.map((m) => (
+                    <tr key={m.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">{m.dateYmd}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                            m.kind === 'opening'
+                              ? 'bg-sky-100 text-sky-700'
+                              : m.kind === 'payment'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : m.kind === 'vendor_pay'
+                                  ? 'bg-orange-100 text-orange-700'
+                                  : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {TREASURY_MOVEMENT_KIND_LABELS[m.kind]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-red-600">{m.fromAccount}</td>
+                      <td className="px-4 py-3">{m.toAccount}</td>
+                      <td
+                        className={`px-4 py-3 text-right tabular-nums font-medium ${
+                          isTreasuryMovementInflow(m) ? 'text-slate-900' : 'text-red-600'
                         }`}
                       >
-                        {TREASURY_MOVEMENT_KIND_LABELS[m.kind]}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-medium text-red-600">{m.fromAccount}</td>
-                    <td className="px-4 py-3">{m.toAccount}</td>
-                    <td
-                      className={`px-4 py-3 text-right tabular-nums font-medium ${
-                        isTreasuryMovementInflow(m) ? 'text-slate-900' : 'text-red-600'
-                      }`}
-                    >
-                      {formatTwd(m.amountTwd)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500">{m.note || '—'}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                        {formatTwd(m.amountTwd)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-500">{m.note || '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          {movements.length > 0 && (
+            <div className="border-t border-slate-100 bg-slate-50/40 px-5 py-4">
+              <nav
+                className="flex items-center justify-center gap-2"
+                aria-label="資金異動紀錄分頁"
+              >
+                <button
+                  type="button"
+                  className="min-w-[2rem] px-1 text-lg font-medium text-slate-500 transition-colors hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-30"
+                  disabled={movementPage <= 1}
+                  aria-label="上一頁"
+                  onClick={() => setMovementPage((p) => Math.max(1, p - 1))}
+                >
+                  &lt;
+                </button>
+                <div className="flex items-center text-sm font-medium tabular-nums">
+                  {movementPageNumbers.map((n, i) => (
+                    <span key={n} className="inline-flex items-center">
+                      {i > 0 && <span className="px-0.5 text-slate-300" aria-hidden>.</span>}
+                      <button
+                        type="button"
+                        onClick={() => setMovementPage(n)}
+                        className={cn(
+                          'min-w-[1.25rem] px-1 transition-colors',
+                          movementPage === n
+                            ? 'font-bold text-amber-700'
+                            : 'text-slate-600 hover:text-amber-700',
+                        )}
+                        aria-current={movementPage === n ? 'page' : undefined}
+                      >
+                        {n}
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="min-w-[2rem] px-1 text-lg font-medium text-slate-500 transition-colors hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-30"
+                  disabled={movementPage >= movementPageCount}
+                  aria-label="下一頁"
+                  onClick={() => setMovementPage((p) => Math.min(movementPageCount, p + 1))}
+                >
+                  &gt;
+                </button>
+              </nav>
+              <p className="mt-2 text-center text-xs text-slate-400 tabular-nums">
+                共 {filteredMovements.length} 筆
+              </p>
+            </div>
+          )}
         </div>
-      </div>
+      </section>
 
       <Modal open={editAccountOpen} title={`編輯帳戶 · ${editAccount}`} onClose={() => setEditAccountOpen(false)}>
         <div className="space-y-4">
